@@ -1,34 +1,29 @@
 import os
+# --- IMPORTANT FIX FOR RENDER ---
+# Render ka proxy hatao
+for key in ['HTTP_PROXY','http_proxy','HTTPS_PROXY','https_proxy']:
+    os.environ.pop(key, None)
+
 import requests
-import base64
-from flask import Flask, request, jsonify
-from datetime import datetime
+import httpx
+from flask import Flask, request
 from openai import OpenAI
 
 app = Flask(__name__)
 
-# --- CONFIG FROM ENV ---
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "urdock_verify_123")
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
-# Fix for proxies error
-client = OpenAI(api_key=OPENAI_API_KEY)
+# Fix: httpx client without proxies argument
+http_client = httpx.Client()
+client = OpenAI(api_key=OPENAI_API_KEY, http_client=http_client)
 
-# --- HELPER: Send WhatsApp Message ---
 def send_whatsapp_message(to, text):
     url = f"https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages"
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "text",
-        "text": {"body": text}
-    }
+    headers = {"Authorization": f"Bearer {WHATSAPP_TOKEN}", "Content-Type": "application/json"}
+    payload = {"messaging_product": "whatsapp","to": to,"type": "text","text": {"body": text}}
     r = requests.post(url, headers=headers, json=payload)
     print(f"Send Response: {r.text}")
     return r
@@ -60,8 +55,6 @@ def webhook():
                         msg = value["messages"][0]
                         from_number = msg["from"]
                         text_body = msg["text"]["body"]
-
-                        # --- AI LOGIC ---
                         try:
                             completion = client.chat.completions.create(
                                 model="gpt-4o-mini",
@@ -70,12 +63,10 @@ def webhook():
                             reply_text = completion.choices[0].message.content
                         except Exception as ai_e:
                             print(f"AI Error: {ai_e}")
-                            reply_text = "Hi! I am Urdoc Bot 🤖"
-
+                            reply_text = f"You said: {text_body}"
                         send_whatsapp_message(from_number, reply_text)
     except Exception as e:
-        print(f"Error in webhook: {e}")
-
+        print(f"Error: {e}")
     return "OK", 200
 
 if __name__ == "__main__":
