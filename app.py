@@ -1,24 +1,12 @@
 import os
-# --- IMPORTANT FIX FOR RENDER ---
-# Render ka proxy hatao
-for key in ['HTTP_PROXY','http_proxy','HTTPS_PROXY','https_proxy']:
-    os.environ.pop(key, None)
-
 import requests
-import httpx
 from flask import Flask, request
-from openai import OpenAI
 
 app = Flask(__name__)
 
 WHATSAPP_TOKEN = os.environ.get("WHATSAPP_TOKEN")
 PHONE_NUMBER_ID = os.environ.get("PHONE_NUMBER_ID")
 VERIFY_TOKEN = os.environ.get("VERIFY_TOKEN", "urdock_verify_123")
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-
-# Fix: httpx client without proxies argument
-http_client = httpx.Client()
-client = OpenAI(api_key=OPENAI_API_KEY, http_client=http_client)
 
 def send_whatsapp_message(to, text):
     url = f"https://graph.facebook.com/v25.0/{PHONE_NUMBER_ID}/messages"
@@ -30,7 +18,7 @@ def send_whatsapp_message(to, text):
 
 @app.route("/")
 def home():
-    return "Bot is Running"
+    return "Bot is Running - No OpenAI needed"
 
 @app.route("/webhook", methods=["GET"])
 def verify_webhook():
@@ -38,7 +26,6 @@ def verify_webhook():
     token = request.args.get("hub.verify_token")
     challenge = request.args.get("hub.challenge")
     if mode == "subscribe" and token == VERIFY_TOKEN:
-        print("WEBHOOK VERIFIED")
         return challenge, 200
     return "Verification failed", 403
 
@@ -55,15 +42,8 @@ def webhook():
                         msg = value["messages"][0]
                         from_number = msg["from"]
                         text_body = msg["text"]["body"]
-                        try:
-                            completion = client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=[{"role": "user", "content": text_body}]
-                            )
-                            reply_text = completion.choices[0].message.content
-                        except Exception as ai_e:
-                            print(f"AI Error: {ai_e}")
-                            reply_text = f"You said: {text_body}"
+                        # Simple reply without AI
+                        reply_text = f"Hey! You said: {text_body}\n\nBot is working ✅"
                         send_whatsapp_message(from_number, reply_text)
     except Exception as e:
         print(f"Error: {e}")
